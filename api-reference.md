@@ -23,7 +23,7 @@ POST https://api.outlayer.fastnear.com/call/{contract}/{project}
 
 | Contract | Project ID |
 |----------|------------|
-| `outlayer.near` | `near-email` |
+| `outlayer.near` | `zavodil.near/near-email` |
 
 **Headers:**
 
@@ -49,11 +49,14 @@ Deposit: 0.025 NEAR (unused refunded)
 
 ```json
 {
-  "source": { "Project": { "project_id": "near-email", "version_key": null } },
+  "source": { "Project": { "project_id": "zavodil.near/near-email", "version_key": null } },
   "input_data": "{\"action\": \"send_email_plaintext\", \"to\": \"...\", ...}",
+  "resource_limits": { "max_memory_mb": 512, "max_instructions": 2000000000, "max_execution_seconds": 120 },
   "response_format": "Json"
 }
 ```
+
+**Note:** The result is returned in transaction logs. Parse it from the log line matching `Output: Json: {...}`.
 
 ---
 
@@ -70,7 +73,7 @@ All API calls use this structure:
 }
 ```
 
-Optional fields: `resource_limits` (not needed for near-email).
+Optional fields: `resource_limits` (recommended for NEAR Email - see below).
 
 ---
 
@@ -509,8 +512,11 @@ Common errors:
 
 | Parameter | Value |
 |-----------|-------|
-| `source.Project.project_id` | `"near-email"` |
+| `source.Project.project_id` | `"zavodil.near/near-email"` |
 | `source.Project.version_key` | `null` (use active) |
+| `resource_limits.max_memory_mb` | `512` |
+| `resource_limits.max_instructions` | `2000000000` |
+| `resource_limits.max_execution_seconds` | `120` |
 | `secrets_ref` | `null` (not needed) |
 | `response_format` | `"Json"` |
 | Attached deposit | 0.025 NEAR (unused refunded) |

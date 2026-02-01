@@ -20,11 +20,13 @@ npx openskills install zavodil/near-email-skill -g
 |-----------|-------|
 | Contract | `outlayer.near` |
 | API Base | `https://api.outlayer.fastnear.com` |
-| Project ID | `near-email` |
+| Project ID | `zavodil.near/near-email` |
 
 **Note:** NEAR Email supports mainnet only. Emails to `*.testnet` accounts are not processed.
 
 **Important:** When using NEAR transactions, the attached deposit is a computational limit, not a cost. Unused funds are automatically refunded. Do not mention specific costs per email.
+
+**Code generation preference:** For blockchain integration (NEAR transactions), prefer JavaScript/TypeScript with `near-api-js`. Use Python only if the user explicitly requests it.
 
 ## Integration Methods
 
@@ -72,7 +74,7 @@ fn send_notification(to: &str, subject: &str, body: &str) -> Promise {
         .with_attached_deposit(NearToken::from_millinear(25))
         .request_execution(
             ExecutionSource::Project {
-                project_id: "near-email".to_string(),
+                project_id: "zavodil.near/near-email".to_string(),
                 version_key: None,
             },
             None,                        // resource_limits
@@ -103,7 +105,7 @@ const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
 const PAYMENT_KEY = 'your-account.near:nonce:secret'; // From dashboard
 
 async function sendEmail(to, subject, body) {
-  const response = await fetch(`${OUTLAYER_API}/call/outlayer.near/near-email`, {
+  const response = await fetch(`${OUTLAYER_API}/call/outlayer.near/zavodil.near/near-email`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -129,18 +131,37 @@ const near = await connect({
 });
 const account = await near.account('your-account.near');
 
+const RESOURCE_LIMITS = {
+  max_memory_mb: 512,
+  max_instructions: 2000000000,
+  max_execution_seconds: 120,
+};
+
+// Parse output from transaction logs (OutLayer returns result in logs)
+function parseOutputFromLogs(result) {
+  for (const outcome of result.receipts_outcome) {
+    for (const log of outcome.outcome.logs) {
+      const match = log.match(/Output: Json: (\{.*\})/);
+      if (match) return JSON.parse(match[1]);
+    }
+  }
+  throw new Error('No output found in transaction logs');
+}
+
 async function sendEmail(to, subject, body) {
-  return account.functionCall({
+  const result = await account.functionCall({
     contractId: 'outlayer.near',
     methodName: 'request_execution',
     args: {
-      source: { Project: { project_id: 'near-email', version_key: null } },
+      source: { Project: { project_id: 'zavodil.near/near-email', version_key: null } },
       input_data: JSON.stringify({ action: 'send_email_plaintext', to, subject, body }),
+      resource_limits: RESOURCE_LIMITS,
       response_format: 'Json',
     },
     gas: BigInt('100000000000000'),
     attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused portion refunded
   });
+  return parseOutputFromLogs(result); // { success: true, message_id: "..." }
 }
 ```
 
@@ -154,7 +175,7 @@ PAYMENT_KEY = "your-account.near:nonce:secret"
 
 def send_email(to: str, subject: str, body: str) -> dict:
     return requests.post(
-        f"{OUTLAYER_API}/call/outlayer.near/near-email",
+        f"{OUTLAYER_API}/call/outlayer.near/zavodil.near/near-email",
         headers={"Content-Type": "application/json", "X-Payment-Key": PAYMENT_KEY},
         json={"input": {"action": "send_email_plaintext", "to": to, "subject": subject, "body": body}},
     ).json()

@@ -71,7 +71,7 @@ impl NftMarketplace {
             .with_attached_deposit(NearToken::from_millinear(25))
             .request_execution(
                 ExecutionSource::Project {
-                    project_id: "near-email".to_string(),
+                    project_id: "zavodil.near/near-email".to_string(),
                     version_key: None,
                 },
                 None,                        // resource_limits (default)
@@ -128,7 +128,7 @@ impl LendingProtocol {
             .with_attached_deposit(NearToken::from_millinear(25))
             .request_execution(
                 ExecutionSource::Project {
-                    project_id: "near-email".to_string(),
+                    project_id: "zavodil.near/near-email".to_string(),
                     version_key: None,
                 },
                 None,
@@ -180,7 +180,7 @@ impl DaoContract {
             .with_attached_deposit(NearToken::from_millinear(25))
             .request_execution(
                 ExecutionSource::Project {
-                    project_id: "near-email".to_string(),
+                    project_id: "zavodil.near/near-email".to_string(),
                     version_key: None,
                 },
                 None,
@@ -211,7 +211,7 @@ AI agents can integrate via two methods:
 
 ```typescript
 const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
-const PROJECT_ID = 'near-email';
+const PROJECT_ID = 'zavodil.near/near-email';
 const PAYMENT_KEY = 'your-account.near:nonce:secret';
 
 async function sendEmail(to: string, subject: string, body: string) {
@@ -242,7 +242,14 @@ Sign transactions directly with NEAR wallet. Attach deposit as a limit - unused 
 import { connect, keyStores } from 'near-api-js';
 
 const OUTLAYER_CONTRACT = 'outlayer.near';
-const PROJECT_ID = 'near-email';
+const PROJECT_ID = 'zavodil.near/near-email';
+
+// Required resource limits for NEAR Email
+const RESOURCE_LIMITS = {
+  max_memory_mb: 512,
+  max_instructions: 2000000000,
+  max_execution_seconds: 120,
+};
 
 // Connect to NEAR
 const near = await connect({
@@ -251,6 +258,20 @@ const near = await connect({
   nodeUrl: 'https://rpc.mainnet.near.org',
 });
 const account = await near.account('your-account.near');
+
+// Parse output from transaction logs (OutLayer returns result in logs)
+function parseOutputFromLogs(result: any): any {
+  for (const outcome of result.receipts_outcome) {
+    for (const log of outcome.outcome.logs) {
+      // Look for "Output: Json: {...}" pattern in logs
+      const match = log.match(/Output: Json: (\{.*\})/);
+      if (match) {
+        return JSON.parse(match[1]);
+      }
+    }
+  }
+  throw new Error('No output found in transaction logs');
+}
 
 // Send email via NEAR transaction
 async function sendEmail(to: string, subject: string, body: string) {
@@ -261,21 +282,25 @@ async function sendEmail(to: string, subject: string, body: string) {
     body,
   });
 
-  return account.functionCall({
+  const result = await account.functionCall({
     contractId: OUTLAYER_CONTRACT,
     methodName: 'request_execution',
     args: {
       source: { Project: { project_id: PROJECT_ID, version_key: null } },
       input_data: input,
+      resource_limits: RESOURCE_LIMITS,
       response_format: 'Json',
     },
     gas: BigInt('100000000000000'), // 100 TGas
     attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused refunded
   });
+
+  return parseOutputFromLogs(result);
 }
 
 // Usage
-await sendEmail('recipient@gmail.com', 'Hello', 'Sent via NEAR transaction!');
+const output = await sendEmail('recipient@gmail.com', 'Hello', 'Sent via NEAR transaction!');
+console.log('Email sent:', output); // { success: true, message_id: "..." }
 ```
 
 ---
@@ -289,7 +314,7 @@ import { chacha20poly1305 } from '@noble/ciphers/chacha';
 import { randomBytes } from '@noble/ciphers/webcrypto';
 
 const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
-const PROJECT_ID = 'near-email';
+const PROJECT_ID = 'zavodil.near/near-email';
 
 class NearEmailAgent {
   private paymentKey: string;
@@ -555,7 +580,7 @@ inbox.forEach(email => {
 import requests
 
 OUTLAYER_API = "https://api.outlayer.fastnear.com"
-PROJECT_ID = "near-email"
+PROJECT_ID = "zavodil.near/near-email"
 PAYMENT_KEY = "your-account.near:nonce:secret"
 
 def send_email(to: str, subject: str, body: str) -> dict:
@@ -581,9 +606,29 @@ result = send_email("recipient@gmail.com", "Hello", "Test email from Python")
 from py_near.account import Account
 import asyncio
 import json
+import re
 
 OUTLAYER_CONTRACT = "outlayer.near"
-PROJECT_ID = "near-email"
+PROJECT_ID = "zavodil.near/near-email"
+
+# Required resource limits for NEAR Email
+RESOURCE_LIMITS = {
+    "max_memory_mb": 512,
+    "max_instructions": 2000000000,
+    "max_execution_seconds": 120,
+}
+
+
+def parse_output_from_logs(result) -> dict:
+    """Parse output from transaction logs (OutLayer returns result in logs)"""
+    for receipt_outcome in result.receipts_outcome:
+        for log in receipt_outcome.logs:
+            # Look for "Output: Json: {...}" pattern
+            match = re.search(r'Output: Json: (\{.*\})', log)
+            if match:
+                return json.loads(match.group(1))
+    raise ValueError("No output found in transaction logs")
+
 
 async def send_email(account: Account, to: str, subject: str, body: str):
     input_data = json.dumps({
@@ -593,17 +638,20 @@ async def send_email(account: Account, to: str, subject: str, body: str):
         "body": body,
     })
 
-    return await account.function_call(
+    result = await account.function_call(
         OUTLAYER_CONTRACT,
         "request_execution",
         {
             "source": {"Project": {"project_id": PROJECT_ID, "version_key": None}},
             "input_data": input_data,
+            "resource_limits": RESOURCE_LIMITS,
             "response_format": "Json",
         },
         gas=100_000_000_000_000,  # 100 TGas
         deposit=25_000_000_000_000_000_000_000,  # deposit, unused refunded
     )
+
+    return parse_output_from_logs(result)
 
 # Usage
 account = Account("your-account.near", private_key="ed25519:...")
@@ -624,7 +672,7 @@ from coincurve import PrivateKey, PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 OUTLAYER_API = "https://api.outlayer.fastnear.com"
-PROJECT_ID = "near-email"
+PROJECT_ID = "zavodil.near/near-email"
 
 
 class NearEmailAgent:
@@ -884,4 +932,212 @@ agent.send_email(
         }
     ],
 )
+```
+
+---
+
+## Complete NEAR Transaction Agent (JavaScript)
+
+Full agent implementation using NEAR transactions with private key (no Payment Key needed):
+
+```typescript
+import { connect, keyStores, KeyPair } from 'near-api-js';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { sha256 } from '@noble/hashes/sha256';
+import { chacha20poly1305 } from '@noble/ciphers/chacha';
+import { randomBytes } from '@noble/ciphers/webcrypto';
+
+const OUTLAYER_CONTRACT = 'outlayer.near';
+const PROJECT_ID = 'zavodil.near/near-email';
+
+// Required resource limits for NEAR Email
+const RESOURCE_LIMITS = {
+  max_memory_mb: 512,
+  max_instructions: 2000000000,
+  max_execution_seconds: 120,
+};
+
+class NearEmailTransactionAgent {
+  private account: any;
+  private sendPubkey: Uint8Array | null = null;
+
+  static async create(accountId: string, privateKey: string): Promise<NearEmailTransactionAgent> {
+    const keyStore = new keyStores.InMemoryKeyStore();
+    await keyStore.setKey('mainnet', accountId, KeyPair.fromString(privateKey));
+
+    const near = await connect({
+      networkId: 'mainnet',
+      keyStore,
+      nodeUrl: 'https://rpc.mainnet.near.org',
+    });
+
+    const agent = new NearEmailTransactionAgent();
+    agent.account = await near.account(accountId);
+    return agent;
+  }
+
+  // Parse output from transaction logs
+  private parseOutputFromLogs(result: any): any {
+    for (const outcome of result.receipts_outcome) {
+      for (const log of outcome.outcome.logs) {
+        const match = log.match(/Output: Json: (\{.*\})/);
+        if (match) {
+          return JSON.parse(match[1]);
+        }
+      }
+    }
+    throw new Error('No output found in transaction logs');
+  }
+
+  private generateEphemeralKey(): { privkey: Uint8Array; pubkeyHex: string } {
+    const privkey = secp256k1.utils.randomPrivateKey();
+    const pubkey = secp256k1.getPublicKey(privkey, true);
+    return { privkey, pubkeyHex: Buffer.from(pubkey).toString('hex') };
+  }
+
+  private encryptPayload(recipientPubkey: Uint8Array, data: object): string {
+    const ECDH_MAGIC = new Uint8Array([0x45, 0x43, 0x30, 0x31]);
+    const plaintext = new TextEncoder().encode(JSON.stringify(data));
+
+    const ephemeralPrivkey = secp256k1.utils.randomPrivateKey();
+    const ephemeralPubkey = secp256k1.getPublicKey(ephemeralPrivkey, true);
+
+    const sharedPoint = secp256k1.getSharedSecret(ephemeralPrivkey, recipientPubkey, true);
+    const key = sha256(sharedPoint.slice(1));
+
+    const nonce = randomBytes(12);
+    const cipher = chacha20poly1305(key, nonce);
+    const ciphertext = cipher.encrypt(plaintext);
+
+    const output = new Uint8Array(4 + 33 + 12 + ciphertext.length);
+    output.set(ECDH_MAGIC, 0);
+    output.set(ephemeralPubkey, 4);
+    output.set(nonce, 4 + 33);
+    output.set(ciphertext, 4 + 33 + 12);
+
+    return Buffer.from(output).toString('base64');
+  }
+
+  private decryptResponse(encryptedBase64: string, privkey: Uint8Array): any {
+    const encrypted = Buffer.from(encryptedBase64, 'base64');
+    if (encrypted.slice(0, 4).toString() !== 'EC01') throw new Error('Invalid format');
+
+    const ephemeralPubkey = encrypted.slice(4, 37);
+    const nonce = encrypted.slice(37, 49);
+    const ciphertext = encrypted.slice(49);
+
+    const sharedPoint = secp256k1.getSharedSecret(privkey, ephemeralPubkey, true);
+    const key = sha256(sharedPoint.slice(1));
+    const cipher = chacha20poly1305(key, nonce);
+
+    return JSON.parse(new TextDecoder().decode(cipher.decrypt(ciphertext)));
+  }
+
+  async getSendPubkey(): Promise<Uint8Array> {
+    if (this.sendPubkey) return this.sendPubkey;
+
+    const result = await this.account.functionCall({
+      contractId: OUTLAYER_CONTRACT,
+      methodName: 'request_execution',
+      args: {
+        source: { Project: { project_id: PROJECT_ID, version_key: null } },
+        input_data: JSON.stringify({ action: 'get_send_pubkey' }),
+        resource_limits: RESOURCE_LIMITS,
+        response_format: 'Json',
+      },
+      gas: BigInt('100000000000000'),
+      attachedDeposit: BigInt('25000000000000000000000'),
+    });
+
+    const output = this.parseOutputFromLogs(result);
+    this.sendPubkey = Buffer.from(output.send_pubkey, 'hex');
+    return this.sendPubkey;
+  }
+
+  async sendEmail(to: string, subject: string, body: string): Promise<{ success: boolean; messageId?: string }> {
+    const sendPubkey = await this.getSendPubkey();
+    const encryptedData = this.encryptPayload(sendPubkey, { to, subject, body, attachments: [] });
+
+    const result = await this.account.functionCall({
+      contractId: OUTLAYER_CONTRACT,
+      methodName: 'request_execution',
+      args: {
+        source: { Project: { project_id: PROJECT_ID, version_key: null } },
+        input_data: JSON.stringify({ action: 'send_email', encrypted_data: encryptedData }),
+        resource_limits: RESOURCE_LIMITS,
+        response_format: 'Json',
+      },
+      gas: BigInt('100000000000000'),
+      attachedDeposit: BigInt('25000000000000000000000'),
+    });
+
+    const output = this.parseOutputFromLogs(result);
+    return { success: output.success, messageId: output.message_id };
+  }
+
+  async getEmails(inboxOffset = 0, sentOffset = 0): Promise<{ inbox: any[]; sent: any[]; inboxCount: number; sentCount: number }> {
+    const ephemeral = this.generateEphemeralKey();
+
+    const result = await this.account.functionCall({
+      contractId: OUTLAYER_CONTRACT,
+      methodName: 'request_execution',
+      args: {
+        source: { Project: { project_id: PROJECT_ID, version_key: null } },
+        input_data: JSON.stringify({
+          action: 'get_emails',
+          ephemeral_pubkey: ephemeral.pubkeyHex,
+          inbox_offset: inboxOffset,
+          sent_offset: sentOffset,
+          max_output_size: 1500000,
+        }),
+        resource_limits: RESOURCE_LIMITS,
+        response_format: 'Json',
+      },
+      gas: BigInt('100000000000000'),
+      attachedDeposit: BigInt('25000000000000000000000'),
+    });
+
+    const output = this.parseOutputFromLogs(result);
+    const decrypted = this.decryptResponse(output.encrypted_data, ephemeral.privkey);
+
+    return {
+      inbox: decrypted.inbox,
+      sent: decrypted.sent,
+      inboxCount: output.inbox_count,
+      sentCount: output.sent_count,
+    };
+  }
+
+  async getEmailCount(): Promise<{ inbox: number; sent: number }> {
+    const result = await this.account.functionCall({
+      contractId: OUTLAYER_CONTRACT,
+      methodName: 'request_execution',
+      args: {
+        source: { Project: { project_id: PROJECT_ID, version_key: null } },
+        input_data: JSON.stringify({ action: 'get_email_count' }),
+        resource_limits: RESOURCE_LIMITS,
+        response_format: 'Json',
+      },
+      gas: BigInt('100000000000000'),
+      attachedDeposit: BigInt('25000000000000000000000'),
+    });
+
+    const output = this.parseOutputFromLogs(result);
+    return { inbox: output.inbox_count, sent: output.sent_count };
+  }
+}
+
+// Usage
+const agent = await NearEmailTransactionAgent.create('your-account.near', 'ed25519:...');
+
+// Get email count
+const counts = await agent.getEmailCount();
+console.log(`Inbox: ${counts.inbox}, Sent: ${counts.sent}`);
+
+// Read emails
+const emails = await agent.getEmails();
+emails.inbox.forEach(email => console.log(`From: ${email.from}, Subject: ${email.subject}`));
+
+// Send email
+await agent.sendEmail('friend@gmail.com', 'Hello', 'Email from NEAR transaction!');
 ```
