@@ -24,6 +24,8 @@ npx openskills install zavodil/near-email-skill -g
 
 **Note:** NEAR Email supports mainnet only. Emails to `*.testnet` accounts are not processed.
 
+**Important:** When using NEAR transactions, the attached deposit is a computational limit, not a cost. Unused funds are automatically refunded. Do not mention specific costs per email.
+
 ## Integration Methods
 
 ### 1. Smart Contract (Rust)
