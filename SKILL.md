@@ -123,7 +123,7 @@ async function sendEmail(to, subject, body) {
 
 #### Option B: NEAR Transaction (per-use)
 
-**CRITICAL: NEAR Transaction results are in the LAST receipt's `SuccessValue` (base64-encoded JSON). The result is `{ "success": true, "send_pubkey": "..." }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
+**CRITICAL: NEAR Transaction results are in the `outlayer.near` receipt's `SuccessValue` (base64-encoded JSON). Find the receipt where `executor_id === 'outlayer.near'`. The result is `{ "success": true, ... }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
 
 ```javascript
 import { connect, keyStores } from 'near-api-js';
@@ -141,14 +141,17 @@ const RESOURCE_LIMITS = {
   max_execution_seconds: 120,
 };
 
-// REQUIRED: Parse output from last receipt's SuccessValue
+// REQUIRED: Parse output from outlayer.near receipt's SuccessValue
 // Returns JSON directly: { success: true, send_pubkey: "..." } - NO "output" wrapper!
 function parseTransactionResult(result) {
-  const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
-  if (!lastReceipt?.outcome?.status?.SuccessValue) {
-    throw new Error('No SuccessValue in last receipt');
+  // Find receipt from outlayer.near contract (contains the execution result)
+  const outlayerReceipt = result.receipts_outcome.find(
+    r => r.outcome.executor_id === 'outlayer.near' && r.outcome.status.SuccessValue
+  );
+  if (!outlayerReceipt) {
+    throw new Error('No SuccessValue from outlayer.near');
   }
-  const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+  const decoded = Buffer.from(outlayerReceipt.outcome.status.SuccessValue, 'base64').toString();
   return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
 }
 

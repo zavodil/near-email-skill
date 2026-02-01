@@ -240,7 +240,7 @@ await sendEmail('recipient@gmail.com', 'Hello', 'Test email from AI agent');
 
 Sign transactions directly with NEAR wallet. Attach deposit as a limit - unused portion is automatically refunded. This is how [mail.near.email](https://mail.near.email) works.
 
-**CRITICAL: NEAR Transaction results are in the LAST receipt's `SuccessValue` (base64-encoded JSON). The result is `{ "success": true, ... }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
+**CRITICAL: NEAR Transaction results are in the `outlayer.near` receipt's `SuccessValue` (base64-encoded JSON). Find the receipt where `executor_id === 'outlayer.near'`. The result is `{ "success": true, ... }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
 
 ```typescript
 import { connect, keyStores } from 'near-api-js';
@@ -263,14 +263,17 @@ const near = await connect({
 });
 const account = await near.account('your-account.near');
 
-// REQUIRED: Parse output from last receipt's SuccessValue
+// REQUIRED: Parse output from outlayer.near receipt's SuccessValue
 // Returns JSON directly: { success: true, ... } - NO "output" wrapper!
 function parseTransactionResult(result: any): any {
-  const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
-  if (!lastReceipt?.outcome?.status?.SuccessValue) {
-    throw new Error('No SuccessValue in last receipt');
+  // Find receipt from outlayer.near contract (contains the execution result)
+  const outlayerReceipt = result.receipts_outcome.find(
+    (r: any) => r.outcome.executor_id === 'outlayer.near' && r.outcome.status.SuccessValue
+  );
+  if (!outlayerReceipt) {
+    throw new Error('No SuccessValue from outlayer.near');
   }
-  const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+  const decoded = Buffer.from(outlayerReceipt.outcome.status.SuccessValue, 'base64').toString();
   return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
 }
 
@@ -621,14 +624,19 @@ RESOURCE_LIMITS = {
 
 
 def parse_transaction_result(result) -> dict:
-    """Parse output from last receipt's SuccessValue (base64 JSON).
+    """Parse output from outlayer.near receipt's SuccessValue (base64 JSON).
     Returns: { success: True, ... } - directly, NO 'output' wrapper!
     """
     import base64
-    last_receipt = result.receipts_outcome[-1]
-    success_value = last_receipt.outcome.status.get("SuccessValue")
-    if not success_value:
-        raise ValueError("No SuccessValue in last receipt")
+    # Find receipt from outlayer.near contract (contains the execution result)
+    outlayer_receipt = next(
+        (r for r in result.receipts_outcome
+         if r.outcome.executor_id == "outlayer.near" and r.outcome.status.get("SuccessValue")),
+        None
+    )
+    if not outlayer_receipt:
+        raise ValueError("No SuccessValue from outlayer.near")
+    success_value = outlayer_receipt.outcome.status.get("SuccessValue")
     decoded = base64.b64decode(success_value).decode()
     return json.loads(decoded)  # { success: True, ... } - directly
 
@@ -979,14 +987,17 @@ class NearEmailTransactionAgent {
     return agent;
   }
 
-  // Parse output from last receipt's SuccessValue (base64 JSON)
+  // Parse output from outlayer.near receipt's SuccessValue (base64 JSON)
   // Returns: { success: true, ... } - directly, NO "output" wrapper!
   private parseTransactionResult(result: any): any {
-    const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
-    if (!lastReceipt?.outcome?.status?.SuccessValue) {
-      throw new Error('No SuccessValue in last receipt');
+    // Find receipt from outlayer.near contract (contains the execution result)
+    const outlayerReceipt = result.receipts_outcome.find(
+      (r: any) => r.outcome.executor_id === 'outlayer.near' && r.outcome.status.SuccessValue
+    );
+    if (!outlayerReceipt) {
+      throw new Error('No SuccessValue from outlayer.near');
     }
-    const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+    const decoded = Buffer.from(outlayerReceipt.outcome.status.SuccessValue, 'base64').toString();
     return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
   }
 

@@ -56,7 +56,7 @@ Deposit: 0.025 NEAR (unused refunded)
 }
 ```
 
-**CRITICAL:** The result is in the LAST receipt's `SuccessValue` (base64-encoded JSON). Returns `{ "success": true, ... }` directly - NO `output` wrapper! Use `parseTransactionResult()` to decode it. See examples.
+**CRITICAL:** The result is in the `outlayer.near` receipt's `SuccessValue` (base64-encoded JSON). Find the receipt where `executor_id === 'outlayer.near'`. Returns `{ "success": true, ... }` directly - NO `output` wrapper! Use `parseTransactionResult()` to decode it. See examples.
 
 ---
 
