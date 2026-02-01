@@ -212,10 +212,15 @@ AI agents can integrate via two methods:
 **Note:** HTTPS API responses have an `output` wrapper: `result.output.send_pubkey`. This is different from NEAR Transaction which returns the result directly.
 
 ```typescript
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { sha256 } from '@noble/hashes/sha256';
+import { chacha20poly1305 } from '@noble/ciphers/chacha';
+
 const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
 const PROJECT_ID = 'zavodil.near/near-email';
 const PAYMENT_KEY = 'your-account.near:nonce:secret';
 
+// Send email (plaintext - simplest option)
 async function sendEmail(to: string, subject: string, body: string) {
   const response = await fetch(`${OUTLAYER_API}/call/outlayer.near/${PROJECT_ID}`, {
     method: 'POST',
@@ -230,8 +235,59 @@ async function sendEmail(to: string, subject: string, body: string) {
   return response.json();
 }
 
+// Read emails (requires ECIES decryption)
+async function getEmails() {
+  // Generate ephemeral keypair for response decryption
+  const ephemeralPrivkey = secp256k1.utils.randomPrivateKey();
+  const ephemeralPubkey = secp256k1.getPublicKey(ephemeralPrivkey, true);
+  const ephemeralPubkeyHex = Buffer.from(ephemeralPubkey).toString('hex');
+
+  const response = await fetch(`${OUTLAYER_API}/call/outlayer.near/${PROJECT_ID}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Payment-Key': PAYMENT_KEY,
+    },
+    body: JSON.stringify({
+      input: {
+        action: 'get_emails',
+        ephemeral_pubkey: ephemeralPubkeyHex,
+        max_output_size: 1500000,
+      },
+    }),
+  });
+
+  const result = await response.json();
+
+  // Decrypt response (EC01 format: magic + sender_pubkey + nonce + ciphertext)
+  const encrypted = Buffer.from(result.output.encrypted_data, 'base64');
+  const senderPubkey = encrypted.slice(4, 37);
+  const nonce = encrypted.slice(37, 49);
+  const ciphertext = encrypted.slice(49);
+
+  // ECDH key exchange
+  const sharedPoint = secp256k1.getSharedSecret(ephemeralPrivkey, senderPubkey, true);
+  const key = sha256(sharedPoint.slice(1));
+
+  // Decrypt with ChaCha20-Poly1305
+  const cipher = chacha20poly1305(key, nonce);
+  const plaintext = cipher.decrypt(ciphertext);
+  const emailData = JSON.parse(new TextDecoder().decode(plaintext));
+
+  return {
+    inbox: emailData.inbox,
+    sent: emailData.sent,
+    inboxCount: result.output.inbox_count,
+    sentCount: result.output.sent_count,
+  };
+}
+
 // Usage
 await sendEmail('recipient@gmail.com', 'Hello', 'Test email from AI agent');
+
+const { inbox, inboxCount } = await getEmails();
+console.log(`You have ${inboxCount} emails`);
+inbox.forEach(email => console.log(`From: ${email.from}`));
 ```
 
 ---
@@ -581,25 +637,70 @@ inbox.forEach(email => {
 ### Option A: Payment Key (Simple HTTPS)
 
 ```python
+import os
+import hashlib
+import base64
+import json
 import requests
+from coincurve import PrivateKey, PublicKey
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 OUTLAYER_API = "https://api.outlayer.fastnear.com"
 PROJECT_ID = "zavodil.near/near-email"
-PAYMENT_KEY = "your-account.near:nonce:secret"
+PAYMENT_KEY = os.environ.get("OUTLAYER_PAYMENT_KEY", "your-account.near:nonce:secret")
 
+# Send email (plaintext - simplest option)
 def send_email(to: str, subject: str, body: str) -> dict:
     response = requests.post(
         f"{OUTLAYER_API}/call/outlayer.near/{PROJECT_ID}",
-        headers={
-            "Content-Type": "application/json",
-            "X-Payment-Key": PAYMENT_KEY,
-        },
+        headers={"Content-Type": "application/json", "X-Payment-Key": PAYMENT_KEY},
         json={"input": {"action": "send_email_plaintext", "to": to, "subject": subject, "body": body}},
     )
     return response.json()
 
+# Read emails (requires ECIES decryption)
+def get_emails() -> dict:
+    # Generate ephemeral keypair for response decryption
+    ephemeral_privkey = PrivateKey()
+    ephemeral_pubkey_hex = ephemeral_privkey.public_key.format(compressed=True).hex()
+
+    response = requests.post(
+        f"{OUTLAYER_API}/call/outlayer.near/{PROJECT_ID}",
+        headers={"Content-Type": "application/json", "X-Payment-Key": PAYMENT_KEY},
+        json={"input": {"action": "get_emails", "ephemeral_pubkey": ephemeral_pubkey_hex, "max_output_size": 1500000}},
+    )
+    result = response.json()
+
+    # Decrypt response (EC01 format: magic + sender_pubkey + nonce + ciphertext)
+    encrypted = base64.b64decode(result["output"]["encrypted_data"])
+    sender_pubkey = PublicKey(encrypted[4:37])
+    nonce = encrypted[37:49]
+    ciphertext = encrypted[49:]
+
+    # ECDH key exchange
+    shared_point = sender_pubkey.multiply(ephemeral_privkey.secret)
+    shared_x = shared_point.format(compressed=True)[1:]
+    key = hashlib.sha256(shared_x).digest()
+
+    # Decrypt with ChaCha20-Poly1305
+    cipher = ChaCha20Poly1305(key)
+    plaintext = cipher.decrypt(nonce, ciphertext, None)
+    email_data = json.loads(plaintext.decode())
+
+    return {
+        "inbox": email_data.get("inbox", []),
+        "sent": email_data.get("sent", []),
+        "inbox_count": result["output"].get("inbox_count", 0),
+        "sent_count": result["output"].get("sent_count", 0),
+    }
+
 # Usage
-result = send_email("recipient@gmail.com", "Hello", "Test email from Python")
+send_email("recipient@gmail.com", "Hello", "Test email from Python")
+
+emails = get_emails()
+print(f"Inbox: {emails['inbox_count']} emails")
+for email in emails["inbox"]:
+    print(f"  From: {email['from']}, Subject: {email['subject']}")
 ```
 
 ---
