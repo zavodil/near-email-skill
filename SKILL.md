@@ -1,0 +1,176 @@
+---
+name: near-email
+description: Send and read blockchain-native emails using NEAR Email service. Use when building notifications for NEAR smart contracts (NFT sales, DeFi liquidation alerts, DAO voting reminders) or when AI agents need email capabilities with a NEAR account identity.
+user-invocable: true
+---
+
+# NEAR Email Integration
+
+Blockchain-native email for NEAR accounts. Every NEAR account automatically has an email: `alice.near` → `alice@near.email`
+
+## Quick Reference
+
+| Component | Value |
+|-----------|-------|
+| Contract | `outlayer.near` |
+| API Base | `https://api.outlayer.fastnear.com` |
+| Project ID | `near-email` |
+
+**Note:** NEAR Email supports mainnet only. Emails to `*.testnet` accounts are not processed.
+
+## Integration Methods
+
+### 1. Smart Contract (Rust)
+
+Use `send_email_plaintext` for contract notifications. Simple API, no encryption needed.
+
+**Warning:** Email content is PUBLIC on the NEAR blockchain. Use only for automated notifications.
+
+```rust
+use near_sdk::{ext_contract, AccountId, Gas, NearToken, Promise};
+use serde::Serialize;
+
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub enum ExecutionSource {
+    Project { project_id: String, version_key: Option<String> },
+}
+
+#[ext_contract(ext_outlayer)]
+pub trait OutLayer {
+    fn request_execution(
+        &mut self,
+        source: ExecutionSource,
+        resource_limits: Option<serde_json::Value>,
+        input_data: Option<String>,
+        secrets_ref: Option<serde_json::Value>,
+        response_format: Option<String>,
+        payer_account_id: Option<AccountId>,
+        params: Option<serde_json::Value>,
+    );
+}
+
+// Send notification from contract (plaintext - content is public on-chain!)
+fn send_notification(to: &str, subject: &str, body: &str) -> Promise {
+    let input = serde_json::json!({
+        "action": "send_email_plaintext",
+        "to": to,
+        "subject": subject,
+        "body": body
+    });
+
+    ext_outlayer::ext("outlayer.near".parse().unwrap())
+        .with_static_gas(Gas::from_tgas(100))
+        .with_attached_deposit(NearToken::from_millinear(25))
+        .request_execution(
+            ExecutionSource::Project {
+                project_id: "near-email".to_string(),
+                version_key: None,
+            },
+            None,                        // resource_limits
+            Some(input.to_string()),     // input_data
+            None,                        // secrets_ref (not needed)
+            Some("Json".to_string()),    // response_format
+            None,                        // payer_account_id
+            None,                        // params
+        )
+}
+```
+
+Response: `{ "success": true, "message_id": "uuid-if-internal" }`
+
+### 2. AI Agent Integration
+
+Two options for AI agents:
+
+| Method | Best For | Payment |
+|--------|----------|---------|
+| **Payment Key (HTTPS)** | Server-side agents | Pre-paid (USDC/USDT) |
+| **NEAR Transaction** | Browser/wallet apps | Per-use (~0.025 NEAR) |
+
+#### Option A: Payment Key (HTTPS API)
+
+```javascript
+const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
+const PAYMENT_KEY = 'your-account.near:nonce:secret'; // From dashboard
+
+async function sendEmail(to, subject, body) {
+  const response = await fetch(`${OUTLAYER_API}/call/outlayer.near/near-email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Payment-Key': PAYMENT_KEY,
+    },
+    body: JSON.stringify({
+      input: { action: 'send_email_plaintext', to, subject, body },
+    }),
+  });
+  return response.json();
+}
+```
+
+#### Option B: NEAR Transaction (per-use)
+
+```javascript
+import { connect, keyStores } from 'near-api-js';
+
+const near = await connect({
+  networkId: 'mainnet',
+  keyStore: new keyStores.BrowserLocalStorageKeyStore(),
+  nodeUrl: 'https://rpc.mainnet.near.org',
+});
+const account = await near.account('your-account.near');
+
+async function sendEmail(to, subject, body) {
+  return account.functionCall({
+    contractId: 'outlayer.near',
+    methodName: 'request_execution',
+    args: {
+      source: { Project: { project_id: 'near-email', version_key: null } },
+      input_data: JSON.stringify({ action: 'send_email_plaintext', to, subject, body }),
+      response_format: 'Json',
+    },
+    gas: BigInt('100000000000000'),
+    attachedDeposit: BigInt('25000000000000000000000'), // 0.025 NEAR
+  });
+}
+```
+
+### 3. Python (Payment Key)
+
+```python
+import requests
+
+OUTLAYER_API = "https://api.outlayer.fastnear.com"
+PAYMENT_KEY = "your-account.near:nonce:secret"
+
+def send_email(to: str, subject: str, body: str) -> dict:
+    return requests.post(
+        f"{OUTLAYER_API}/call/outlayer.near/near-email",
+        headers={"Content-Type": "application/json", "X-Payment-Key": PAYMENT_KEY},
+        json={"input": {"action": "send_email_plaintext", "to": to, "subject": subject, "body": body}},
+    ).json()
+```
+
+## API Actions
+
+| Action | Description |
+|--------|-------------|
+| `send_email` | Send email (encrypted payload, for UI/agents) |
+| `send_email_plaintext` | Send email (plaintext, for smart contracts) |
+| `get_emails` | Fetch inbox and sent (encrypted response) |
+| `delete_email` | Delete email by ID |
+| `get_email_count` | Get counts (no encryption) |
+| `get_send_pubkey` | Get sender's pubkey (no encryption, cacheable) |
+
+## Getting a Payment Key
+
+1. Go to [OutLayer Dashboard](https://outlayer.fastnear.com/dashboard)
+2. Create a new Payment Key
+3. Top up balance with USDC/USDT
+4. Copy key (format: `owner:nonce:secret`)
+
+## Additional Resources
+
+For complete code examples, see [examples.md](examples.md)
+For full API reference, see [api-reference.md](api-reference.md)
