@@ -56,7 +56,7 @@ Deposit: 0.025 NEAR (unused refunded)
 }
 ```
 
-**Note:** The result is returned in transaction logs. Parse it from the log line matching `Output: Json: {...}`.
+**CRITICAL:** The result is in the LAST receipt's `SuccessValue` (base64-encoded JSON). Returns `{ "success": true, ... }` directly - NO `output` wrapper! Use `parseTransactionResult()` to decode it. See examples.
 
 ---
 

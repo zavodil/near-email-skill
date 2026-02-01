@@ -100,6 +100,8 @@ Two options for AI agents:
 
 #### Option A: Payment Key (HTTPS API)
 
+**Note:** HTTPS API responses use `result.output.xxx` format. See NEAR Transaction for different parsing.
+
 ```javascript
 const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
 const PAYMENT_KEY = 'your-account.near:nonce:secret'; // From dashboard
@@ -121,6 +123,8 @@ async function sendEmail(to, subject, body) {
 
 #### Option B: NEAR Transaction (per-use)
 
+**CRITICAL: NEAR Transaction results are in the LAST receipt's `SuccessValue` (base64-encoded JSON). The result is `{ "success": true, "send_pubkey": "..." }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
+
 ```javascript
 import { connect, keyStores } from 'near-api-js';
 
@@ -137,15 +141,15 @@ const RESOURCE_LIMITS = {
   max_execution_seconds: 120,
 };
 
-// Parse output from transaction logs (OutLayer returns result in logs)
-function parseOutputFromLogs(result) {
-  for (const outcome of result.receipts_outcome) {
-    for (const log of outcome.outcome.logs) {
-      const match = log.match(/Output: Json: (\{.*\})/);
-      if (match) return JSON.parse(match[1]);
-    }
+// REQUIRED: Parse output from last receipt's SuccessValue
+// Returns JSON directly: { success: true, send_pubkey: "..." } - NO "output" wrapper!
+function parseTransactionResult(result) {
+  const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
+  if (!lastReceipt?.outcome?.status?.SuccessValue) {
+    throw new Error('No SuccessValue in last receipt');
   }
-  throw new Error('No output found in transaction logs');
+  const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+  return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
 }
 
 async function sendEmail(to, subject, body) {
@@ -161,7 +165,25 @@ async function sendEmail(to, subject, body) {
     gas: BigInt('100000000000000'),
     attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused portion refunded
   });
-  return parseOutputFromLogs(result); // { success: true, message_id: "..." }
+  return parseTransactionResult(result); // { success: true, message_id: "..." }
+}
+
+// Example: Get sender pubkey
+async function getSendPubkey() {
+  const result = await account.functionCall({
+    contractId: 'outlayer.near',
+    methodName: 'request_execution',
+    args: {
+      source: { Project: { project_id: 'zavodil.near/near-email', version_key: null } },
+      input_data: JSON.stringify({ action: 'get_send_pubkey' }),
+      resource_limits: RESOURCE_LIMITS,
+      response_format: 'Json',
+    },
+    gas: BigInt('100000000000000'),
+    attachedDeposit: BigInt('25000000000000000000000'),
+  });
+  const output = parseTransactionResult(result); // { success: true, send_pubkey: "02..." }
+  return Buffer.from(output.send_pubkey, 'hex'); // Note: output.send_pubkey, NOT output.output.send_pubkey
 }
 ```
 

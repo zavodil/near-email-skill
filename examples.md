@@ -209,6 +209,8 @@ AI agents can integrate via two methods:
 
 ### Option A: Payment Key (Simple HTTPS)
 
+**Note:** HTTPS API responses have an `output` wrapper: `result.output.send_pubkey`. This is different from NEAR Transaction which returns the result directly.
+
 ```typescript
 const OUTLAYER_API = 'https://api.outlayer.fastnear.com';
 const PROJECT_ID = 'zavodil.near/near-email';
@@ -238,6 +240,8 @@ await sendEmail('recipient@gmail.com', 'Hello', 'Test email from AI agent');
 
 Sign transactions directly with NEAR wallet. Attach deposit as a limit - unused portion is automatically refunded. This is how [mail.near.email](https://mail.near.email) works.
 
+**CRITICAL: NEAR Transaction results are in the LAST receipt's `SuccessValue` (base64-encoded JSON). The result is `{ "success": true, ... }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
+
 ```typescript
 import { connect, keyStores } from 'near-api-js';
 
@@ -259,18 +263,15 @@ const near = await connect({
 });
 const account = await near.account('your-account.near');
 
-// Parse output from transaction logs (OutLayer returns result in logs)
-function parseOutputFromLogs(result: any): any {
-  for (const outcome of result.receipts_outcome) {
-    for (const log of outcome.outcome.logs) {
-      // Look for "Output: Json: {...}" pattern in logs
-      const match = log.match(/Output: Json: (\{.*\})/);
-      if (match) {
-        return JSON.parse(match[1]);
-      }
-    }
+// REQUIRED: Parse output from last receipt's SuccessValue
+// Returns JSON directly: { success: true, ... } - NO "output" wrapper!
+function parseTransactionResult(result: any): any {
+  const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
+  if (!lastReceipt?.outcome?.status?.SuccessValue) {
+    throw new Error('No SuccessValue in last receipt');
   }
-  throw new Error('No output found in transaction logs');
+  const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+  return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
 }
 
 // Send email via NEAR transaction
@@ -295,7 +296,7 @@ async function sendEmail(to: string, subject: string, body: string) {
     attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused refunded
   });
 
-  return parseOutputFromLogs(result);
+  return parseTransactionResult(result);
 }
 
 // Usage
@@ -619,15 +620,17 @@ RESOURCE_LIMITS = {
 }
 
 
-def parse_output_from_logs(result) -> dict:
-    """Parse output from transaction logs (OutLayer returns result in logs)"""
-    for receipt_outcome in result.receipts_outcome:
-        for log in receipt_outcome.logs:
-            # Look for "Output: Json: {...}" pattern
-            match = re.search(r'Output: Json: (\{.*\})', log)
-            if match:
-                return json.loads(match.group(1))
-    raise ValueError("No output found in transaction logs")
+def parse_transaction_result(result) -> dict:
+    """Parse output from last receipt's SuccessValue (base64 JSON).
+    Returns: { success: True, ... } - directly, NO 'output' wrapper!
+    """
+    import base64
+    last_receipt = result.receipts_outcome[-1]
+    success_value = last_receipt.outcome.status.get("SuccessValue")
+    if not success_value:
+        raise ValueError("No SuccessValue in last receipt")
+    decoded = base64.b64decode(success_value).decode()
+    return json.loads(decoded)  # { success: True, ... } - directly
 
 
 async def send_email(account: Account, to: str, subject: str, body: str):
@@ -651,7 +654,7 @@ async def send_email(account: Account, to: str, subject: str, body: str):
         deposit=25_000_000_000_000_000_000_000,  # deposit, unused refunded
     )
 
-    return parse_output_from_logs(result)
+    return parse_transaction_result(result)
 
 # Usage
 account = Account("your-account.near", private_key="ed25519:...")
@@ -976,17 +979,15 @@ class NearEmailTransactionAgent {
     return agent;
   }
 
-  // Parse output from transaction logs
-  private parseOutputFromLogs(result: any): any {
-    for (const outcome of result.receipts_outcome) {
-      for (const log of outcome.outcome.logs) {
-        const match = log.match(/Output: Json: (\{.*\})/);
-        if (match) {
-          return JSON.parse(match[1]);
-        }
-      }
+  // Parse output from last receipt's SuccessValue (base64 JSON)
+  // Returns: { success: true, ... } - directly, NO "output" wrapper!
+  private parseTransactionResult(result: any): any {
+    const lastReceipt = result.receipts_outcome[result.receipts_outcome.length - 1];
+    if (!lastReceipt?.outcome?.status?.SuccessValue) {
+      throw new Error('No SuccessValue in last receipt');
     }
-    throw new Error('No output found in transaction logs');
+    const decoded = Buffer.from(lastReceipt.outcome.status.SuccessValue, 'base64').toString();
+    return JSON.parse(decoded); // { success: true, ... } - directly, no wrapper
   }
 
   private generateEphemeralKey(): { privkey: Uint8Array; pubkeyHex: string } {
@@ -1049,7 +1050,7 @@ class NearEmailTransactionAgent {
       attachedDeposit: BigInt('25000000000000000000000'),
     });
 
-    const output = this.parseOutputFromLogs(result);
+    const output = this.parseTransactionResult(result);
     this.sendPubkey = Buffer.from(output.send_pubkey, 'hex');
     return this.sendPubkey;
   }
@@ -1071,7 +1072,7 @@ class NearEmailTransactionAgent {
       attachedDeposit: BigInt('25000000000000000000000'),
     });
 
-    const output = this.parseOutputFromLogs(result);
+    const output = this.parseTransactionResult(result);
     return { success: output.success, messageId: output.message_id };
   }
 
@@ -1097,7 +1098,7 @@ class NearEmailTransactionAgent {
       attachedDeposit: BigInt('25000000000000000000000'),
     });
 
-    const output = this.parseOutputFromLogs(result);
+    const output = this.parseTransactionResult(result);
     const decrypted = this.decryptResponse(output.encrypted_data, ephemeral.privkey);
 
     return {
@@ -1122,7 +1123,7 @@ class NearEmailTransactionAgent {
       attachedDeposit: BigInt('25000000000000000000000'),
     });
 
-    const output = this.parseOutputFromLogs(result);
+    const output = this.parseTransactionResult(result);
     return { inbox: output.inbox_count, sent: output.sent_count };
   }
 }
