@@ -203,7 +203,7 @@ AI agents can integrate via two methods:
 | Method | Best For | Payment |
 |--------|----------|---------|
 | **Payment Key (HTTPS)** | Server-side agents, high volume | Pre-paid balance (USDC/USDT) |
-| **NEAR Transaction** | Browser wallets, per-use billing | Pay per transaction (~0.025 NEAR) |
+| **NEAR Transaction** | Browser wallets, direct signing | Deposit (unused portion refunded) |
 
 ---
 
@@ -236,7 +236,7 @@ await sendEmail('recipient@gmail.com', 'Hello', 'Test email from AI agent');
 
 ### Option B: NEAR Transaction (Per-Use)
 
-Sign transactions directly with NEAR wallet. This is how [mail.near.email](https://mail.near.email) works.
+Sign transactions directly with NEAR wallet. Attach deposit as a limit - unused portion is automatically refunded. This is how [mail.near.email](https://mail.near.email) works.
 
 ```typescript
 import { connect, keyStores } from 'near-api-js';
@@ -270,7 +270,7 @@ async function sendEmail(to: string, subject: string, body: string) {
       response_format: 'Json',
     },
     gas: BigInt('100000000000000'), // 100 TGas
-    attachedDeposit: BigInt('25000000000000000000000'), // 0.025 NEAR
+    attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused refunded
   });
 }
 
@@ -602,7 +602,7 @@ async def send_email(account: Account, to: str, subject: str, body: str):
             "response_format": "Json",
         },
         gas=100_000_000_000_000,  # 100 TGas
-        deposit=25_000_000_000_000_000_000_000,  # 0.025 NEAR
+        deposit=25_000_000_000_000_000_000_000,  # deposit, unused refunded
     )
 
 # Usage

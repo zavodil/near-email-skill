@@ -9,7 +9,7 @@ Two ways to access NEAR Email:
 | Method | Endpoint | Payment |
 |--------|----------|---------|
 | **HTTPS API** | `POST api.outlayer.fastnear.com/call/...` | Payment Key (pre-paid) |
-| **NEAR Transaction** | `outlayer.near::request_execution` | Per-use (~0.025 NEAR) |
+| **NEAR Transaction** | `outlayer.near::request_execution` | Deposit (unused refunded) |
 
 **Note:** NEAR Email supports mainnet only.
 
@@ -42,7 +42,7 @@ Call `outlayer.near` contract directly:
 Contract: outlayer.near
 Method: request_execution
 Gas: 100 TGas
-Deposit: 0.025 NEAR
+Deposit: 0.025 NEAR (unused refunded)
 ```
 
 **Arguments:**
@@ -513,5 +513,5 @@ Common errors:
 | `source.Project.version_key` | `null` (use active) |
 | `secrets_ref` | `null` (not needed) |
 | `response_format` | `"Json"` |
-| Attached deposit | ~0.025 NEAR |
+| Attached deposit | 0.025 NEAR (unused refunded) |
 | Gas | 100 TGas |

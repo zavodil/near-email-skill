@@ -8,6 +8,12 @@ user-invocable: true
 
 Blockchain-native email for NEAR accounts. Every NEAR account automatically has an email: `alice.near` → `alice@near.email`
 
+## Installation
+
+```bash
+npx openskills install zavodil/near-email-skill -g
+```
+
 ## Quick Reference
 
 | Component | Value |
@@ -86,7 +92,7 @@ Two options for AI agents:
 | Method | Best For | Payment |
 |--------|----------|---------|
 | **Payment Key (HTTPS)** | Server-side agents | Pre-paid (USDC/USDT) |
-| **NEAR Transaction** | Browser/wallet apps | Per-use (~0.025 NEAR) |
+| **NEAR Transaction** | Browser/wallet apps | Deposit (unused returned) |
 
 #### Option A: Payment Key (HTTPS API)
 
@@ -131,7 +137,7 @@ async function sendEmail(to, subject, body) {
       response_format: 'Json',
     },
     gas: BigInt('100000000000000'),
-    attachedDeposit: BigInt('25000000000000000000000'), // 0.025 NEAR
+    attachedDeposit: BigInt('25000000000000000000000'), // deposit, unused portion refunded
   });
 }
 ```
