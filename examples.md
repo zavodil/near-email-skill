@@ -298,6 +298,8 @@ Sign transactions directly with NEAR wallet. Attach deposit as a limit - unused 
 
 **CRITICAL: NEAR Transaction results are in the `outlayer.near` receipt's `SuccessValue` (base64-encoded JSON). Find the receipt where `executor_id === 'outlayer.near'`. The result is `{ "success": true, ... }` - NO `output` wrapper. Use `parseTransactionResult()` to extract it.**
 
+The examples attach 0.025 NEAR where the answer is small, and 0.4 NEAR for an inbox page of up to 30000 bytes. The OutLayer contract holds 0.00001 NEAR per byte of an answer of 1 KB or more and of an input above 32 KB while the request runs, returned when it completes. For an email with attachments or an attachment download, attach `estimate_execution_cost(resource_limits, input_len, output_len)` from `outlayer.near` (see api-reference.md, "Deposit for stored data").
+
 ```typescript
 import { connect, keyStores } from 'near-api-js';
 
@@ -1201,13 +1203,14 @@ class NearEmailTransactionAgent {
           ephemeral_pubkey: ephemeral.pubkeyHex,
           inbox_offset: inboxOffset,
           sent_offset: sentOffset,
-          max_output_size: 1500000,
+          // Every byte of the answer is held at 0.00001 NEAR while the request runs, returned after.
+          max_output_size: 30000,
         }),
         resource_limits: RESOURCE_LIMITS,
         response_format: 'Json',
       },
       gas: BigInt('100000000000000'),
-      attachedDeposit: BigInt('25000000000000000000000'),
+      attachedDeposit: BigInt('400000000000000000000000'), // 0.4 NEAR: compute + a 30000-byte answer, rest refunded
     });
 
     const output = this.parseTransactionResult(result);

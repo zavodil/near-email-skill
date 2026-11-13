@@ -41,9 +41,20 @@ Call `outlayer.near` contract directly:
 ```
 Contract: outlayer.near
 Method: request_execution
-Gas: 100 TGas
-Deposit: 0.025 NEAR (unused refunded)
+Gas: 100 TGas (300 TGas for an input above 32 KB)
+Deposit: 0.025 NEAR (unused refunded) for a request whose answer is under 1 KB and input under 32 KB
 ```
+
+**Deposit for stored data.** The OutLayer contract keeps the request's `input_data` (the email
+you send, attachments included) and the answer it returns in its state while the request runs,
+and holds 0.00001 NEAR per byte for that storage (about 10 NEAR per MB): every byte of an answer
+of 1 KB or more, and the input above 32 KB. A guard against spam, returned with the unused
+deposit when the request completes. Attach `estimate_execution_cost(resource_limits, input_len,
+output_len)` from `outlayer.near`, with `input_len` the byte length of `input_data` and
+`output_len` the largest answer you allow: `max_output_size` plus ~4 KB, or about 4/3 of an
+attachment's size plus ~4 KB for `get_attachment`. A request whose answer the deposit cannot hold
+fails with `output_storage_unpaid:` and the amount to attach. An inbox page of `max_output_size:
+30000` needs about 0.4 NEAR attached. Payment Key mode (HTTPS) needs no deposit at all.
 
 **Arguments:**
 
@@ -519,5 +530,5 @@ Common errors:
 | `resource_limits.max_execution_seconds` | `120` |
 | `secrets_ref` | `null` (not needed) |
 | `response_format` | `"Json"` |
-| Attached deposit | 0.025 NEAR (unused refunded) |
+| Attached deposit | 0.025 NEAR (unused refunded) for small requests; with an answer of 1 KB or more or an input above 32 KB, `estimate_execution_cost(resource_limits, input_len, output_len)` — see "Deposit for stored data" |
 | Gas | 100 TGas |
