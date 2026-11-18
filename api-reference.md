@@ -8,7 +8,7 @@ Two ways to access NEAR Email:
 
 | Method | Endpoint | Payment |
 |--------|----------|---------|
-| **HTTPS API** | `POST api.outlayer.fastnear.com/call/...` | Payment Key (pre-paid) |
+| **HTTPS API** | `POST api.outlayer.ai/call/...` | Payment Key (pre-paid) |
 | **NEAR Transaction** | `outlayer.near::request_execution` | Deposit (unused refunded) |
 
 **Note:** NEAR Email supports mainnet only.
@@ -18,7 +18,7 @@ Two ways to access NEAR Email:
 ### Option A: HTTPS API (Payment Key)
 
 ```
-POST https://api.outlayer.fastnear.com/call/{contract}/{project}
+POST https://api.outlayer.ai/call/{contract}/{project}
 ```
 
 | Contract | Project ID |
